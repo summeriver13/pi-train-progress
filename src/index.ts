@@ -1,4 +1,4 @@
-import { open, stat } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { formatProgress, parseProgress, truncate } from "./progress.ts";
@@ -37,15 +37,6 @@ async function readTail(path: string, maxBytes: number): Promise<string> {
     return new TextDecoder().decode(buffer.subarray(0, result.bytesRead));
   } finally {
     await handle.close();
-  }
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return true;
-  } catch (error) {
-    return !isNotFound(error);
   }
 }
 
@@ -187,9 +178,8 @@ export default function trainProgressExtension(pi: ExtensionAPI): void {
   const monitor = new TrainProgressMonitor(DEFAULT_LOG_PATH);
 
   pi.registerFlag("train-log", {
-    description: "Path to a training log to show in the footer",
+    description: "Path to a training log; enables progress for this session",
     type: "string",
-    default: DEFAULT_LOG_PATH,
   });
 
   pi.registerCommand("train", {
@@ -218,9 +208,6 @@ export default function trainProgressExtension(pi: ExtensionAPI): void {
     const flagValue = pi.getFlag("train-log");
     if (typeof flagValue === "string" && flagValue.trim().length > 0) {
       monitor.setPath(cleanPath(flagValue));
-    }
-
-    if (!monitor.isEnabled() && (await fileExists(monitor.getPath()))) {
       await monitor.enableAndRefresh();
     }
   });
