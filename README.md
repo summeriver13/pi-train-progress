@@ -4,9 +4,10 @@ Show training progress from a log file inside pi.
 
 ## What it does
 
-When enabled, the extension reads the end of a training log every two seconds.
+When a session has a selected log, the extension reads the end of that log every two seconds.
 It shows one progress line above the editor and a short status in the footer.
-The widget is off by default. Enable it in the session that should show it.
+An optional owner line names the session that started the run.
+The widget is off until you select a log with `/train` or the launcher registers one.
 
 ```text
 run b0_shuffled_l4
@@ -39,18 +40,23 @@ pi -e F:/Project-Repos/pi-train-progress/src/index.ts
 
 ## Use
 
-By default, the widget does not appear at session start.
-Run `/train` in the session that should show it.
+The extension looks for a per-session registry entry at session start.
+If the entry exists, it enables the widget automatically.
+Otherwise, run `/train` in the session that should show it.
 
 ```text
 /train                         Enable and show the current log.
 /train F:/tmp/tune_full.log    Use another log.
 /train on                      Enable monitoring with the current path.
-/train off                     Disable monitoring and clear the widget.
+/train off                     Disable monitoring, clear the widget, and remove the registry entry.
 ```
 
 The default log is `F:/tmp/tune_full.log`.
 Set `PI_TRAIN_LOG` to change the default.
+
+`/train` writes the registry entry for the current session.
+The selection survives `/reload`.
+`/train off` deletes it.
 
 To enable monitoring at launch, pass the flag explicitly:
 
@@ -58,7 +64,38 @@ To enable monitoring at launch, pass the flag explicitly:
 pi --train-log F:/tmp/tune_full.log
 ```
 
-Without the flag, other sessions show no training UI.
+Without a registry entry or flag, a session shows no training UI.
+
+## Auto start
+
+The launcher registers the log for the session that starts the training:
+
+```bash
+LOG=/f/tmp/b0.log
+REGISTRY_DIR="${PI_TRAIN_REGISTRY_DIR:-$HOME/.pi/agent/train-progress}"
+
+if [ -n "${PI_SESSION_ID:-}" ]; then
+  mkdir -p "$REGISTRY_DIR"
+  printf '%s\n' "$LOG" > "$REGISTRY_DIR/$PI_SESSION_ID"
+fi
+```
+
+The registry file contains one line: the log path.
+The default directory is `~/.pi/agent/train-progress`.
+Set `PI_TRAIN_REGISTRY_DIR` to an absolute path in both pi and the launcher to
+move it.
+
+The extension reads the registry at session start and polls it every two seconds.
+A training started later in the same session appears without `/train`.
+Git Bash paths such as `/f/tmp/b0.log` are accepted.
+Other sessions do not read this entry.
+
+A launcher outside pi has no `PI_SESSION_ID`, so it does not register the log.
+Use `/train` in that case.
+
+If one session starts several runs, the registry points to the latest log and
+the widget switches to it.
+`/train off` deletes the entry.
 
 ## Log format
 
@@ -89,8 +126,8 @@ If no epoch line exists, it shows the last non-empty line.
 
 ## Run label
 
-The first widget line says which run the log belongs to. It comes from the last
-marker line above the current epoch:
+The run line says which run the log belongs to. It comes from the last marker
+line above the current epoch:
 
 ```text
 === run b0_shuffled_l4 | 10:56
@@ -107,21 +144,57 @@ train 20/20 [####################] 100%  loss 0.0238  49s/ep  ETA 0s
 out: runs/b0_shuffled_l4.pt
 ```
 
+## Owner
+
+The widget can show which session started the run. The launcher writes a
+sidecar file next to the log:
+
+```bash
+LOG=/f/tmp/b0.log
+
+{
+  printf 'session=%s\n' "${PI_SESSION_ID:-unknown}"
+  printf 'cwd=%s\n' "$PWD"
+  printf 'started=%s\n' "$(date -Is)"
+} > "$LOG.owner"
+```
+
+The widget then adds one line:
+
+```text
+owner 01a1a792-f89a-741c-80c5-ca91acd3dc86  F:\Project-Research
+run b0_shuffled_l4
+train 20/20 [####################] 100%  loss 0.0238  49s/ep  ETA 0s
+```
+
+`PI_SESSION_ID` is set by pi in the shell that starts the training. A launch
+from a normal terminal writes `unknown`. The `started` field is for humans;
+the extension ignores it.
+
+Write the sidecar every time you truncate the log. A missing or invalid sidecar
+only removes the owner line. It does not stop progress updates.
+
+Auto start uses a separate registry file. The sidecar only adds the owner line.
+
 ## Limits
 
-- The widget is off by default in every session.
+- The widget is off until the session has a registry entry or `/train`.
+- Auto start needs a launcher that runs inside pi and writes the registry.
+- The owner line appears only when `<log>.owner` exists.
+- A registry entry for a missing log shows `train waiting for <file>`.
 - The widget is visible in TUI and RPC modes.
 - Print and JSON modes have no UI.
-- The extension reads one local file. It does not start or stop training.
-- The extension polls every two seconds.
+- The extension reads the log, the optional owner sidecar, and the session registry.
+  It does not start or stop training.
+- The extension polls the log and registry every two seconds.
 
 ## Development
 
 The repository has no runtime dependencies.
-Run the parser tests:
+Run the unit tests:
 
 ```bash
-node --test src/progress.test.ts
+pnpm test
 ```
 
 Test the extension with `pi -e`.
