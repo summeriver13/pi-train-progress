@@ -34,7 +34,11 @@ async function readTail(path: string, maxBytes: number): Promise<string> {
     const length = fileStat.size - start;
     const buffer = new Uint8Array(length);
     const result = await handle.read(buffer, 0, length, start);
-    return new TextDecoder().decode(buffer.subarray(0, result.bytesRead));
+    const text = new TextDecoder().decode(buffer.subarray(0, result.bytesRead));
+    if (start === 0) return text;
+
+    const lineBreak = /\r\n|\r|\n/.exec(text);
+    return lineBreak === null ? "" : text.slice(lineBreak.index + lineBreak[0].length);
   } finally {
     await handle.close();
   }
@@ -142,7 +146,7 @@ class TrainProgressMonitor {
     }
 
     const lines = text
-      .split(/\r?\n/)
+      .split(/\r\n|\r|\n/)
       .map((line) => line.trimEnd())
       .filter((line) => line.length > 0);
     const progress = parseProgress(lines);
@@ -162,7 +166,11 @@ class TrainProgressMonitor {
     if (lastLine !== undefined && lastLine !== progress.lastLine) {
       widgetLines.push("last: " + truncate(lastLine, MAX_LAST_LINE));
     }
-    this.show(widgetLines, "train " + progress.current + "/" + progress.total);
+    const status =
+      progress.total === undefined
+        ? "train " + progress.current
+        : "train " + progress.current + "/" + progress.total;
+    this.show(widgetLines, status);
   }
 
   private renderError(error: unknown): void {
