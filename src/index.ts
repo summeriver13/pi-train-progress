@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { formatProgress, parseProgress, truncate } from "./progress.ts";
+import { formatProgress, parseProgress, runTitle, truncate } from "./progress.ts";
 import type { TrainingProgress } from "./progress.ts";
 
 const DEFAULT_LOG_PATH = process.env.PI_TRAIN_LOG?.trim() || "F:/tmp/tune_full.log";
@@ -162,7 +162,10 @@ class TrainProgressMonitor {
 
   private showProgress(progress: TrainingProgress, lines: string[]): void {
     const lastLine = lines[lines.length - 1];
-    const widgetLines = [formatProgress(progress)];
+    const widgetLines = ["run " + runTitle(progress, this.logPath), formatProgress(progress)];
+    if (progress.outPath !== undefined) {
+      widgetLines.push("out: " + progress.outPath);
+    }
     if (lastLine !== undefined && lastLine !== progress.lastLine) {
       widgetLines.push("last: " + truncate(lastLine, MAX_LAST_LINE));
     }

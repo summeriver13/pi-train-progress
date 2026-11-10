@@ -12,6 +12,8 @@ const DURATION_PATTERN = new RegExp(
   "gi",
 );
 const VALIDATION_LINE_PATTERN = /\bvalid(?:ation)?\b/i;
+const RUN_MARKER_PATTERN = /^===\s*run\s+(\S+)/;
+const OUT_PATH_PATTERN = /checkpoint\s*->\s*(\S+)/;
 
 const LOSS_PATTERN = /\b(?:train\s+)?loss\s*[=:]?\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)/i;
 const AUC_PATTERN = /\bauc\s*[=:]?\s*([0-9]+(?:\.[0-9]+)?)/i;
@@ -32,6 +34,8 @@ export interface TrainingProgress {
   metrics: TrainingMetric[];
   secondsPerEpoch?: number;
   lastLine: string;
+  runLabel?: string;
+  outPath?: string;
 }
 
 interface EpochMatch {
@@ -124,8 +128,32 @@ function parseDuration(value: string): number | undefined {
   return Number.isFinite(total) ? total : undefined;
 }
 
-function findSecondsPerEpoch(lines: string[], start: number): number | undefined {
+function findRunLabel(lines: string[], start: number): string | undefined {
   for (let index = start; index >= 0; index -= 1) {
+    const match = RUN_MARKER_PATTERN.exec(lines[index]);
+    if (match !== null) return match[1];
+  }
+  return undefined;
+}
+
+function findOutPath(lines: string[], start: number): string | undefined {
+  for (let index = lines.length - 1; index > start; index -= 1) {
+    const match = OUT_PATH_PATTERN.exec(lines[index]);
+    if (match !== null) return match[1];
+  }
+  return undefined;
+}
+
+export function runTitle(progress: TrainingProgress, logPath: string): string {
+  if (progress.runLabel !== undefined) return progress.runLabel;
+  const base = logPath.split(/[\\/]/).pop() ?? logPath;
+  return base.replace(/\.[^.]+$/, "");
+}
+
+function findSecondsPerEpoch(lines: string[], start: number): number | undefined {
+  const stop = Math.max(0, start - METRIC_WINDOW_LINES);
+  for (let index = start; index >= stop; index -= 1) {
+    if (index < start && matchEpochLine(lines[index]) !== undefined) return undefined;
     const matches = Array.from(lines[index].matchAll(DURATION_PATTERN));
     for (let matchIndex = matches.length - 1; matchIndex >= 0; matchIndex -= 1) {
       const value = parseDuration(matches[matchIndex][1] ?? matches[matchIndex][2]);
@@ -176,6 +204,8 @@ export function parseProgress(lines: string[]): TrainingProgress | undefined {
     metrics: collectMetrics(lines, epochIndex),
     secondsPerEpoch: findSecondsPerEpoch(lines, epochIndex),
     lastLine: lines[epochIndex],
+    runLabel: findRunLabel(lines, epochIndex),
+    outPath: findOutPath(lines, epochIndex),
   };
 }
 

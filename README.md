@@ -9,6 +9,7 @@ It shows one progress line above the editor and a short status in the footer.
 The widget is off by default. Enable it in the session that should show it.
 
 ```text
+run b0_shuffled_l4
 train 11/20 [##########----------]  55%  loss 0.0249  1m47s/ep  ETA 16m
 last: saved HDFS_full_testing.npz | sequences=460049 | positives=13470
 ```
@@ -85,6 +86,26 @@ It shows up to three metrics: `loss`, `valid auc`, `auc`, then `acc`.
 A zero-based `epoch: 3` is displayed one higher than the raw number.
 
 If no epoch line exists, it shows the last non-empty line.
+
+## Run label
+
+The first widget line says which run the log belongs to. It comes from the last
+marker line above the current epoch:
+
+```text
+=== run b0_shuffled_l4 | 10:56
+```
+
+Print that line from the launcher script before each arm. Without a marker, the
+label is the log file name without its extension (`F:/tmp/b0.log` → `b0`).
+
+A finished arm also shows its checkpoint, taken from the `checkpoint ->` line:
+
+```text
+run b0_shuffled_l4
+train 20/20 [####################] 100%  loss 0.0238  49s/ep  ETA 0s
+out: runs/b0_shuffled_l4.pt
+```
 
 ## Limits
 

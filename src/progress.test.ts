@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatProgress, parseProgress } from "./progress.ts";
+import { formatProgress, parseProgress, runTitle } from "./progress.ts";
 
 test("parseProgress uses the last epoch line", () => {
   const progress = parseProgress([
@@ -15,6 +15,8 @@ test("parseProgress uses the last epoch line", () => {
     metrics: [{ label: "loss", value: "0.0249" }],
     secondsPerEpoch: 107,
     lastLine: "epoch 11/20 loss 0.0249 (107s)",
+    runLabel: undefined,
+    outPath: undefined,
   });
 });
 
@@ -69,6 +71,8 @@ test("parseProgress reads KT logs", () => {
     ],
     secondsPerEpoch: 1340.45,
     lastLine: "epoch: 0",
+    runLabel: undefined,
+    outPath: undefined,
   });
   assert.match(formatProgress(progress), /ETA 1h07m/);
 });
@@ -82,6 +86,20 @@ test("parseProgress supports a KT epoch without a total", () => {
   assert.equal(formatProgress(progress), "train epoch 4  loss 216.6786");
 });
 
+test("parseProgress does not borrow speed from an earlier epoch", () => {
+  const progress = parseProgress(["epoch 1/3 loss 0.9 (44s)", "epoch 2/3 loss 0.5 (45s)", "epoch 3/3 loss 0.3"]);
+
+  assert.ok(progress);
+  assert.equal(progress.secondsPerEpoch, undefined);
+});
+
+test("parseProgress keeps speed from a line above the epoch heading", () => {
+  const progress = parseProgress([" 25%|##  | 1/4 [22:20<1:07:01, 1340.45s/it]", "epoch: 0"]);
+
+  assert.ok(progress);
+  assert.equal(progress.secondsPerEpoch, 1340.45);
+});
+
 test("parseProgress stops metrics at the next epoch", () => {
   const progress = parseProgress([
     "epoch: 0",
@@ -92,6 +110,37 @@ test("parseProgress stops metrics at the next epoch", () => {
 
   assert.equal(progress?.current, 2);
   assert.deepEqual(progress?.metrics, [{ label: "loss", value: "2" }]);
+});
+
+test("parseProgress reads the run marker of the current arm", () => {
+  const progress = parseProgress([
+    "=== run b0_params_l4 | 10:16",
+    "epoch 20/20 loss 0.0238 (49s)",
+    "checkpoint -> runs/b0_params_l4.pt | best_f1 0.8982",
+    "=== run b0_shuffled_l4 | 10:56",
+    "epoch 2/20 loss 0.0941 (49s)",
+  ]);
+
+  assert.equal(progress?.runLabel, "b0_shuffled_l4");
+  assert.equal(progress?.outPath, undefined);
+  assert.ok(progress);
+  assert.equal(runTitle(progress, "F:/tmp/b0.log"), "b0_shuffled_l4");
+});
+
+test("parseProgress reads the output checkpoint of the finished arm", () => {
+  const progress = parseProgress([
+    "epoch 20/20 loss 0.0235 (107s)",
+    "checkpoint -> runs/m2_hdfs_adapter_l4.pt | best_f1 0.8986",
+  ]);
+
+  assert.equal(progress?.outPath, "runs/m2_hdfs_adapter_l4.pt");
+});
+
+test("runTitle falls back to the log file name", () => {
+  const progress = parseProgress(["epoch 3/8 loss 0.125 (95s)"]);
+  assert.ok(progress);
+  assert.equal(runTitle(progress, "F:/tmp/b0.log"), "b0");
+  assert.equal(runTitle(progress, "C:\\logs\\train.v2.log"), "train.v2");
 });
 
 test("formatProgress includes the bar and ETA", () => {
