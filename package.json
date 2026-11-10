@@ -1,0 +1,15 @@
+{
+  "name": "pi-train-progress",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pi extension that shows training progress from a log file.",
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test src/progress.test.ts"
+  }
+}
