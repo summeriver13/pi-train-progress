@@ -27,6 +27,21 @@ test("parseProgress accepts seconds per epoch", () => {
   assert.equal(progress?.secondsPerEpoch, 95);
 });
 
+test("parseProgress converts minute and hour durations", () => {
+  const minute = parseProgress(["epoch 17/20 loss 0.0240 1m40s/ep"]);
+  const hour = parseProgress(["epoch 17/20 loss 0.0240 1h2m/ep"]);
+  const mixed = parseProgress(["epoch 17/20 loss 0.0240 1h2m3s/ep"]);
+  const parentheses = parseProgress(["epoch 17/20 loss 0.0240 (1m40s)"]);
+
+  assert.equal(minute?.secondsPerEpoch, 100);
+  assert.equal(hour?.secondsPerEpoch, 3720);
+  assert.equal(mixed?.secondsPerEpoch, 3723);
+  assert.equal(parentheses?.secondsPerEpoch, 100);
+  assert.ok(minute);
+  assert.match(formatProgress(minute), /1m40s\/ep/);
+  assert.match(formatProgress(minute), /ETA 5m/);
+});
+
 test("parseProgress ignores lines without a valid epoch", () => {
   assert.equal(parseProgress(["epoch 0/0", "no progress here"]), undefined);
 });

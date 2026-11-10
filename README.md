@@ -64,6 +64,7 @@ Without the flag, other sessions show no training UI.
 The extension reads the last 16 KiB and uses the last epoch line.
 
 LogFormer style: epoch and metrics on one line.
+Durations can use seconds, minutes, or hours: `(103s)`, `95s/ep`, `1m40s/ep`, `1h2m/ep`.
 
 ```text
 epoch 11/20 loss 0.0249 (107s)

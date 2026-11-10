@@ -5,7 +5,12 @@ const MAX_METRICS = 3;
 const EPOCH_FRACTION_PATTERN = /\bepoch\s+(\d+)\s*\/\s*(\d+)\b/i;
 const EPOCH_INDEX_PATTERN = /\bepoch\s*:\s*(\d+)\b/i;
 const TOTAL_PATTERN = /['"]?num_epochs['"]?\s*[:=]\s*(\d+)/i;
-const SECONDS_PATTERN = /\((\d+(?:\.\d+)?)\s*s\)|(\d+(?:\.\d+)?)\s*s\/(?:ep(?:och)?|it)/gi;
+const DURATION_TOKEN =
+  "((?=\\d+(?:\\.\\d+)?\\s*[hms])(?:\\d+(?:\\.\\d+)?\\s*h)?\\s*(?:\\d+(?:\\.\\d+)?\\s*m)?\\s*(?:\\d+(?:\\.\\d+)?\\s*s)?)";
+const DURATION_PATTERN = new RegExp(
+  `\\(${DURATION_TOKEN}\\)|${DURATION_TOKEN}\\/(?:ep(?:och)?|it)`,
+  "gi",
+);
 const VALIDATION_LINE_PATTERN = /\bvalid(?:ation)?\b/i;
 
 const LOSS_PATTERN = /\b(?:train\s+)?loss\s*[=:]?\s*([0-9]+(?:\.[0-9]+)?(?:e[+-]?\d+)?)/i;
@@ -106,14 +111,26 @@ function collectMetrics(lines: string[], start: number): TrainingMetric[] {
     .map((label) => ({ label, value: values.get(label) ?? "" }));
 }
 
+function parseDuration(value: string): number | undefined {
+  const hours = /(\d+(?:\.\d+)?)\s*h/i.exec(value);
+  const minutes = /(\d+(?:\.\d+)?)\s*m(?!s)/i.exec(value);
+  const seconds = /(\d+(?:\.\d+)?)\s*s/i.exec(value);
+  if (hours === null && minutes === null && seconds === null) return undefined;
+
+  const total =
+    (hours === null ? 0 : Number(hours[1]) * 3600) +
+    (minutes === null ? 0 : Number(minutes[1]) * 60) +
+    (seconds === null ? 0 : Number(seconds[1]));
+  return Number.isFinite(total) ? total : undefined;
+}
+
 function findSecondsPerEpoch(lines: string[], start: number): number | undefined {
   for (let index = start; index >= 0; index -= 1) {
-    const matches = Array.from(lines[index].matchAll(SECONDS_PATTERN));
-    const match = matches[matches.length - 1];
-    if (match === undefined) continue;
-
-    const value = Number(match[1] ?? match[2]);
-    if (Number.isFinite(value)) return value;
+    const matches = Array.from(lines[index].matchAll(DURATION_PATTERN));
+    for (let matchIndex = matches.length - 1; matchIndex >= 0; matchIndex -= 1) {
+      const value = parseDuration(matches[matchIndex][1] ?? matches[matchIndex][2]);
+      if (value !== undefined) return value;
+    }
   }
   return undefined;
 }
