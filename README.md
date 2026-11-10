@@ -61,12 +61,27 @@ Without the flag, other sessions show no training UI.
 
 ## Log format
 
-The extension reads the last 16 KiB and uses the last line with `epoch N/M`.
-It reads `loss` and `(Ns)` when present.
+The extension reads the last 16 KiB and uses the last epoch line.
+
+LogFormer style: epoch and metrics on one line.
 
 ```text
 epoch 11/20 loss 0.0249 (107s)
 ```
+
+KT style: zero-based `epoch: N`, with metrics on following lines.
+Total comes from `num_epochs`; speed comes from tqdm `s/it`.
+
+```text
+epoch: 3
+
+train loss = 216.6786, auc=0.8258, accuracy=0.7791
+
+valid auc=0.7883, accuracy=0.7507
+```
+
+It shows up to three metrics: `loss`, `valid auc`, `auc`, then `acc`.
+A zero-based `epoch: 3` is displayed one higher than the raw number.
 
 If no epoch line exists, it shows the last non-empty line.
 
