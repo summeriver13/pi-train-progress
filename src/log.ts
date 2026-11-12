@@ -1,4 +1,5 @@
-import { open, readFile } from "node:fs/promises";
+import { open, readdir, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { formatOwner, parseOwner } from "./owner.ts";
 import type { TrainingOwner } from "./owner.ts";
 import { truncate } from "./progress.ts";
@@ -36,6 +37,30 @@ export function cleanPath(value: string): string {
     return normalizeDrivePath(trimmed.slice(1, -1));
   }
   return normalizeDrivePath(trimmed);
+}
+
+export async function newestLogPath(directory: string): Promise<string | undefined> {
+  let names: string[];
+  try {
+    names = (await readdir(directory)).filter((name) => name.toLowerCase().endsWith(".log"));
+  } catch {
+    return undefined;
+  }
+
+  let newest: string | undefined;
+  let newestTime = -1;
+  for (const name of names) {
+    const path = join(directory, name);
+    try {
+      const info = await stat(path);
+      if (!info.isFile() || info.mtimeMs <= newestTime) continue;
+      newest = path;
+      newestTime = info.mtimeMs;
+    } catch {
+      continue;
+    }
+  }
+  return newest;
 }
 
 export async function readTail(path: string, maxBytes: number): Promise<string> {

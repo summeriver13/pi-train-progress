@@ -1,4 +1,4 @@
-import { basename } from "node:path";
+import { basename, dirname } from "node:path";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   cleanPath,
@@ -6,6 +6,7 @@ import {
   formatOwnerLines,
   isNotFound,
   MAX_LAST_LINE,
+  newestLogPath,
   readOwner,
   readTail,
 } from "./log.ts";
@@ -25,6 +26,7 @@ export { DEFAULT_LOG_PATH };
 
 export class TrainProgressMonitor {
   private logPath: string;
+  private fixed = false;
   private enabled = false;
   private timer: ReturnType<typeof setInterval> | undefined;
   private autoTimer: ReturnType<typeof setInterval> | undefined;
@@ -51,6 +53,7 @@ export class TrainProgressMonitor {
   async enable(path?: string): Promise<void> {
     if (path !== undefined && path.trim().length > 0) {
       this.setPath(cleanPath(path));
+      this.fixed = true;
     }
     this.watchRegistry();
     await this.enableAndRefresh();
@@ -135,6 +138,7 @@ export class TrainProgressMonitor {
       if (nextPath === this.logPath && this.enabled) return;
 
       this.logPath = nextPath;
+      this.fixed = true;
       if (version !== this.selectionVersion) return;
 
       if (this.enabled) {
@@ -198,6 +202,8 @@ export class TrainProgressMonitor {
 
     this.reading = true;
     try {
+      await this.followNewest();
+      if (!this.enabled) return;
       owner = await readOwner(this.logPath + OWNER_SUFFIX);
       if (!this.enabled) return;
       const text = await readTail(this.logPath, TAIL_BYTES);
@@ -209,6 +215,15 @@ export class TrainProgressMonitor {
     } finally {
       this.reading = false;
     }
+  }
+
+  private async followNewest(): Promise<void> {
+    if (this.fixed) return;
+
+    const candidate = await newestLogPath(dirname(this.logPath));
+    if (candidate === undefined || candidate === this.logPath) return;
+
+    this.logPath = candidate;
   }
 
   private render(text: string, owner: OwnerRead): void {
