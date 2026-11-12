@@ -54,6 +54,14 @@ Otherwise, run `/train` in the session that should show it.
 The default log is `F:/tmp/tune_full.log`.
 Set `PI_TRAIN_LOG` to change the default.
 
+Logs that print `epoch 3/20 step 900/1798 loss 0.088` move the bar inside the
+epoch.
+Without a step field the bar moves once per epoch.
+
+Without `/train <path>`, the widget follows the most recently written `.log`
+in the directory of the current path (default `F:/tmp`).
+A new run therefore appears on its own; `/train <path>` pins one file.
+
 `/train` writes the registry entry for the current session.
 The selection survives `/reload`.
 `/train off` deletes it.

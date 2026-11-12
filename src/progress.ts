@@ -4,6 +4,7 @@ const MAX_METRICS = 3;
 
 const EPOCH_FRACTION_PATTERN = /\bepoch\s+(\d+)\s*\/\s*(\d+)\b/i;
 const EPOCH_INDEX_PATTERN = /\bepoch\s*:\s*(\d+)\b/i;
+const STEP_PATTERN = /\bstep\s+(\d+)\s*\/\s*(\d+)\b/i;
 const TOTAL_PATTERN = /['"]?num_epochs['"]?\s*[:=]\s*(\d+)/i;
 const DURATION_TOKEN =
   "((?=\\d+(?:\\.\\d+)?\\s*[hms])(?:\\d+(?:\\.\\d+)?\\s*h)?\\s*(?:\\d+(?:\\.\\d+)?\\s*m)?\\s*(?:\\d+(?:\\.\\d+)?\\s*s)?)";
@@ -31,6 +32,8 @@ export interface TrainingMetric {
 export interface TrainingProgress {
   current: number;
   total?: number;
+  /** Position inside the current epoch, from 0 to 1, when the log prints step lines. */
+  fraction?: number;
   metrics: TrainingMetric[];
   secondsPerEpoch?: number;
   lastLine: string;
@@ -61,6 +64,18 @@ function matchEpochLine(line: string): EpochMatch | undefined {
     }
   }
   return undefined;
+}
+
+function parseStepFraction(line: string, epoch: EpochMatch): number | undefined {
+  const match = STEP_PATTERN.exec(line);
+  if (match === null || epoch.total === undefined) return undefined;
+
+  const step = Number(match[1]);
+  const steps = Number(match[2]);
+  if (!Number.isFinite(step) || !Number.isFinite(steps) || steps <= 0) return undefined;
+
+  const done = (epoch.current - 1 + Math.min(step, steps) / steps) / epoch.total;
+  return Math.min(1, Math.max(0, done));
 }
 
 function parseTotal(lines: string[]): number | undefined {
@@ -201,6 +216,7 @@ export function parseProgress(lines: string[]): TrainingProgress | undefined {
   return {
     current: epoch.current,
     total: epoch.total ?? parseTotal(lines),
+    fraction: parseStepFraction(lines[epochIndex], epoch),
     metrics: collectMetrics(lines, epochIndex),
     secondsPerEpoch: findSecondsPerEpoch(lines, epochIndex),
     lastLine: lines[epochIndex],
@@ -216,7 +232,7 @@ export function formatProgress(progress: TrainingProgress): string {
   if (total === undefined) {
     head = "train epoch " + progress.current;
   } else {
-    const ratio = Math.min(1, Math.max(0, progress.current / total));
+    const ratio = Math.min(1, Math.max(0, progress.fraction ?? progress.current / total));
     const filled = Math.round(ratio * BAR_WIDTH);
     const bar = "#".repeat(filled) + "-".repeat(BAR_WIDTH - filled);
     const percent = String(Math.round(ratio * 100)).padStart(3, " ");
@@ -233,7 +249,11 @@ export function formatProgress(progress: TrainingProgress): string {
   const eta =
     total === undefined || progress.secondsPerEpoch === undefined
       ? ""
-      : "  ETA " + formatDuration(progress.secondsPerEpoch * Math.max(0, total - progress.current));
+      : "  ETA " +
+        formatDuration(
+          progress.secondsPerEpoch *
+            Math.max(0, total - (progress.fraction === undefined ? progress.current : total * progress.fraction)),
+        );
 
   return head + metrics + speed + eta;
 }

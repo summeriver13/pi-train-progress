@@ -12,12 +12,32 @@ test("parseProgress uses the last epoch line", () => {
   assert.deepEqual(progress, {
     current: 11,
     total: 20,
+    fraction: undefined,
     metrics: [{ label: "loss", value: "0.0249" }],
     secondsPerEpoch: 107,
     lastLine: "epoch 11/20 loss 0.0249 (107s)",
     runLabel: undefined,
     outPath: undefined,
   });
+});
+
+test("parseProgress turns step lines into a fraction", () => {
+  const progress = parseProgress([
+    "epoch 2/20 loss 0.0200 (106s)",
+    "epoch 3/20 step 450/1798 loss 0.0880",
+  ]);
+
+  assert.equal(progress?.current, 3);
+  assert.equal(progress?.total, 20);
+  assert.ok(Math.abs((progress?.fraction ?? 0) - (2 + 450 / 1798) / 20) < 1e-9);
+  assert.match(formatProgress(progress as NonNullable<typeof progress>), /train 3\/20 \[##------------------\] +11%/);
+});
+
+test("formatProgress keeps whole-epoch steps without a fraction", () => {
+  const progress = parseProgress(["epoch 3/20 loss 0.0880 (106s)"]);
+
+  assert.equal(progress?.fraction, undefined);
+  assert.match(formatProgress(progress as NonNullable<typeof progress>), /train 3\/20 \[###-----------------\] +15%/);
 });
 
 test("parseProgress accepts seconds per epoch", () => {
@@ -64,6 +84,7 @@ test("parseProgress reads KT logs", () => {
   assert.deepEqual(progress, {
     current: 1,
     total: 4,
+    fraction: undefined,
     metrics: [
       { label: "loss", value: "250.3615" },
       { label: "valid auc", value: "0.7773" },
